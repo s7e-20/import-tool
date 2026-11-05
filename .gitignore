@@ -1,0 +1,10 @@
+bin/
+obj/
+publish/
+client/node_modules/
+client/dist/
+src/AnnuityImport.Server/wwwroot/
+*.user
+spec-extract.txt
+details-sheet.txt
+test-sheet.txt

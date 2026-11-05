@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AnnuityImport.Server/AnnuityImport.Server.csproj" />
+  </Folder>
+</Solution>
