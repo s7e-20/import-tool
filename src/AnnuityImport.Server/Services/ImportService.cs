@@ -57,6 +57,10 @@ public sealed class ImportService
     {
         worksheet = dataset.Worksheet,
         rowCount = dataset.Rows.Count,
+        columnCount = dataset.Columns.Count,
+        firstRow = FirstRow(dataset),
+        lastRow = LastRow(dataset),
+        emptyRowsSkipped = EmptySkipped(dataset),
         columns = dataset.Columns.Select(column => new
         {
             key = column.Key,
@@ -253,8 +257,25 @@ public sealed class ImportService
             name = sheet.Name,
             hasDataset = sheet.HasDataset,
             error = sheet.Error,
-            rowCount = sheet.Dataset?.Rows.Count ?? 0
+            rowCount = sheet.Dataset?.Rows.Count ?? 0,
+            columnCount = sheet.Dataset?.Columns.Count ?? 0,
+            firstRow = sheet.Dataset is null ? null : FirstRow(sheet.Dataset),
+            lastRow = sheet.Dataset is null ? null : LastRow(sheet.Dataset),
+            emptyRowsSkipped = sheet.Dataset is null ? 0 : EmptySkipped(sheet.Dataset)
         });
+
+    private static int? FirstRow(ExcelDataset dataset) =>
+        dataset.Rows.Count == 0 ? null : dataset.Rows.Min(row => row.RowNumber);
+
+    private static int? LastRow(ExcelDataset dataset) =>
+        dataset.Rows.Count == 0 ? null : dataset.Rows.Max(row => row.RowNumber);
+
+    private static int EmptySkipped(ExcelDataset dataset)
+    {
+        if (dataset.Rows.Count == 0 || LastRow(dataset) is not int last)
+            return 0;
+        return Math.Max(0, last - 1 - dataset.Rows.Count);
+    }
 
     private static WorksheetRead? FindSheet(WorkbookRead workbook, string name) =>
         workbook.Worksheets.FirstOrDefault(sheet => sheet.Name.Equals(name, StringComparison.OrdinalIgnoreCase));

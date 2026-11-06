@@ -351,7 +351,7 @@ public static class AssignmentEngine
 
         return field.Kind switch
         {
-            TargetKind.Text => (false, false, hasNumber || hasDate || hasBoolean),
+            TargetKind.Text => (false, false, hasDate || hasBoolean),
             TargetKind.DateTime => (hasText, false, hasNumber || hasBoolean),
             TargetKind.Integer or TargetKind.Decimal => (false, hasText, hasDate || hasBoolean),
             TargetKind.Boolean => (false, false, hasDate),
@@ -388,6 +388,7 @@ public static class AssignmentEngine
             return plan.Field.Kind switch
             {
                 TargetKind.Text when cell.Kind == ExcelValueKind.Text => Converted.Success(cell.Text),
+                TargetKind.Text when cell.Kind == ExcelValueKind.Number => Converted.Success(PlainNumber(cell.Number!.Value)),
                 TargetKind.DateTime when cell.Kind == ExcelValueKind.DateTime => Converted.Success(cell.DateTime),
                 TargetKind.DateTime when cell.Kind == ExcelValueKind.Text => ParseDate(cell.Text ?? "", plan.DateFormat),
                 TargetKind.Integer when cell.Kind == ExcelValueKind.Number => ToInteger(cell.Number!.Value, cell.Display),
@@ -405,6 +406,9 @@ public static class AssignmentEngine
             return Converted.Fail(ex.Message);
         }
     }
+
+    private static string PlainNumber(decimal number) =>
+        number.ToString("0.#############################", CultureInfo.InvariantCulture);
 
     private static Converted ConvertConstant(FieldDef field, string value)
     {

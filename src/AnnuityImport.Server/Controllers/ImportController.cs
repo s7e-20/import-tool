@@ -46,7 +46,8 @@ public sealed class ImportController : ControllerBase
             kind = field.Kind.ToString().ToLowerInvariant(),
             mandatory = field.Mandatory,
             order = index + 1
-        })
+        }),
+        hiddenCount = TargetCatalogue.HiddenColumns.Count
     });
 
     [HttpPost("uploads")]

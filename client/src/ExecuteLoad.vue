@@ -2,13 +2,31 @@
 import { computed, ref } from 'vue'
 import { api } from './api.js'
 
+const props = defineProps({ hiddenCount: { type: Number, default: 59 } })
+
 const excel = ref(null)
 const mappingFile = ref(null)
+const mappingDoc = ref(null)
 const inspect = ref(null)
 const worksheet = ref('')
 const busy = ref(false)
 const message = ref('')
 const result = ref(null)
+const excelInput = ref(null)
+const mappingInput = ref(null)
+
+const summary = computed(() => {
+  const assignments = mappingDoc.value?.assignments
+  if (!Array.isArray(assignments)) return ''
+  const source = assignments.filter(item => item.mode === 'source').length
+  const constant = assignments.filter(item => item.mode === 'constant').length
+  return `${source + constant} fields assigned (${source} from columns, ${constant} constants) · ${props.hiddenCount} system fields automatic`
+})
+
+const selectedSheet = computed(() => {
+  const name = worksheet.value || inspect.value?.worksheet
+  return (inspect.value?.worksheets || []).find(sheet => sheet.name === name) || null
+})
 
 const canExecute = computed(() => {
   if (!excel.value || !mappingFile.value || busy.value || !inspect.value) return false
@@ -17,20 +35,38 @@ const canExecute = computed(() => {
   return true
 })
 
-function onExcel(event) {
+const problemCount = computed(() => {
+  if (!result.value || result.value.ok) return 0
+  return (result.value.definitionErrors?.length || 0) + (result.value.errors?.length || 0)
+})
+
+function pickExcel() { excelInput.value?.click() }
+function pickMapping() { mappingInput.value?.click() }
+
+async function onExcel(event) {
   excel.value = event.target.files?.[0] || null
+  event.target.value = ''
   inspect.value = null
   result.value = null
   message.value = ''
-  if (excel.value && mappingFile.value) review()
+  if (excel.value && mappingFile.value) await review()
 }
 
-function onMapping(event) {
+async function onMapping(event) {
   mappingFile.value = event.target.files?.[0] || null
+  event.target.value = ''
+  mappingDoc.value = null
   inspect.value = null
   result.value = null
   message.value = ''
-  if (excel.value && mappingFile.value) review()
+  if (mappingFile.value) {
+    try {
+      mappingDoc.value = JSON.parse(await mappingFile.value.text())
+    } catch {
+      mappingDoc.value = null
+    }
+  }
+  if (excel.value && mappingFile.value) await review()
 }
 
 function formData() {
@@ -49,6 +85,8 @@ async function review() {
     inspect.value = await api('/api/loads/inspect', { method: 'POST', body: formData() })
     if (inspect.value.worksheet && !inspect.value.needsWorksheet)
       worksheet.value = inspect.value.worksheet
+    else
+      worksheet.value = ''
   } catch (error) {
     inspect.value = null
     message.value = error.message
@@ -72,54 +110,102 @@ async function execute() {
 </script>
 
 <template>
-  <section class="panel">
-    <h2>Execute a load</h2>
-    <p class="muted">Choose the Excel file and a mapping JSON file. The mapping is read-only. Every execution inserts the rows again. This tool does not look for duplicates.</p>
-    <div class="row">
-      <label class="file">Excel
-        <input type="file" accept=".xlsx" @change="onExcel" />
-      </label>
-      <label class="file">Mapping
-        <input type="file" accept=".json,application/json" @change="onMapping" />
-      </label>
-    </div>
-    <p v-if="excel || mappingFile" class="muted">
-      <span v-if="excel">{{ excel.name }}</span>
-      <span v-if="excel && mappingFile"> · </span>
-      <span v-if="mappingFile">{{ mappingFile.name }}</span>
-    </p>
-
-    <div v-if="inspect && inspect.needsWorksheet" class="stack" style="margin-top: 0.8rem;">
-      <label>
-        Worksheet
-        <select v-model="worksheet">
-          <option value="">Select a worksheet</option>
-          <option v-for="sheet in inspect.worksheets.filter(item => item.hasDataset)" :key="sheet.name" :value="sheet.name">
-            {{ sheet.name }} ({{ sheet.rowCount }} rows)
-          </option>
-        </select>
-      </label>
-    </div>
-    <p v-else-if="inspect?.worksheet" class="muted">Worksheet from the mapping: {{ inspect.worksheet }}<span v-if="inspect.rowCount"> · {{ inspect.rowCount }} data rows</span></p>
-    <p v-if="inspect?.message" class="error">{{ inspect.message }}</p>
-    <p v-if="message" class="error">{{ message }}</p>
-
-    <div class="row" style="margin-top: 0.9rem;">
-      <button :disabled="!canExecute" @click="execute">{{ busy ? 'Executing…' : 'Execute' }}</button>
+  <div class="flow">
+    <div>
+      <h1>Execute a load</h1>
+      <p class="lede">Choose the Excel file and a saved mapping (JSON). The mapping is read-only here. Every execution inserts the rows again.</p>
     </div>
 
-    <div v-if="result" :class="result.ok ? 'banner ok' : 'banner bad'">
-      <span v-if="result.ok">Inserted {{ result.inserted }} rows into dbo.CASE_TRANSFERT<span v-if="result.firstId"> (IdRecord {{ result.firstId }}–{{ result.lastId }})</span>.</span>
-      <span v-else>The load was not inserted.</span>
-      <ul v-if="result.definitionErrors?.length" class="issues">
-        <li v-for="issue in result.definitionErrors" :key="issue">{{ issue }}</li>
-      </ul>
-      <ul v-if="result.errors?.length" class="issues">
-        <li v-for="(issue, index) in result.errors" :key="index">
-          <span v-if="issue.row">Row {{ issue.row }}, </span>
-          <span v-if="issue.target">{{ issue.target }}: </span>{{ issue.message }}
-        </li>
-      </ul>
-    </div>
-  </section>
+    <section class="card" aria-label="Load settings">
+      <div class="load-grid">
+        <div>
+          <span class="quiet" style="font-weight:600;color:#3d4656">Excel file</span>
+          <div class="picked">
+            <span class="name grow">{{ excel ? excel.name : 'Choose an .xlsx file' }}</span>
+            <button type="button" class="change" @click="pickExcel">{{ excel ? 'Change' : 'Browse' }}</button>
+            <input ref="excelInput" type="file" accept=".xlsx" hidden @change="onExcel" />
+          </div>
+        </div>
+        <div>
+          <span class="quiet" style="font-weight:600;color:#3d4656">Mapping (JSON)</span>
+          <div class="picked">
+            <span class="name grow">{{ mappingFile ? mappingFile.name : 'Choose a .json file' }}</span>
+            <button type="button" class="change" @click="pickMapping">{{ mappingFile ? 'Change' : 'Browse' }}</button>
+            <input ref="mappingInput" type="file" accept=".json,application/json" hidden @change="onMapping" />
+          </div>
+        </div>
+        <label v-if="inspect">Worksheet
+          <select v-model="worksheet" :disabled="!inspect.needsWorksheet">
+            <option v-if="!inspect.needsWorksheet" :value="inspect.worksheet">{{ inspect.worksheet }} (from mapping)</option>
+            <template v-else>
+              <option value="">Select a worksheet</option>
+              <option v-for="sheet in (inspect.worksheets || []).filter(item => item.hasDataset)" :key="sheet.name" :value="sheet.name">
+                {{ sheet.name }} ({{ sheet.rowCount }} rows)
+              </option>
+            </template>
+          </select>
+        </label>
+        <div v-if="summary" class="summary-block">
+          <span>Mapping summary</span>
+          <span>{{ summary }}<template v-if="worksheet"> · worksheet {{ worksheet }}</template></span>
+        </div>
+        <div style="grid-column: 1 / -1" class="actions">
+          <button class="primary" :disabled="!canExecute" @click="execute">{{ busy ? 'Executing…' : 'Execute' }}</button>
+        </div>
+      </div>
+    </section>
+
+    <section v-if="inspect?.message" class="banner bad" role="alert">
+      <h3>This Excel file does not match the mapping</h3>
+      <p>{{ inspect.message }}</p>
+      <p>The mapping cannot be edited. Create a new mapping from this file.</p>
+    </section>
+    <p v-if="message" class="banner bad">{{ message }}</p>
+
+    <section v-if="result?.ok" class="card" role="status" aria-label="Result">
+      <div class="result-head">
+        <h2>Result</h2>
+        <span class="done">Completed</span>
+      </div>
+      <div class="bar" role="progressbar" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100" aria-label="Progress"><div></div></div>
+      <div class="stats">
+        <div class="stat"><div class="k">Rows read</div><div class="v">{{ result.dataRows }}</div></div>
+        <div class="stat good"><div class="k">Inserted</div><div class="v">{{ result.inserted }}</div></div>
+        <div class="stat"><div class="k">Empty rows skipped</div><div class="v">{{ selectedSheet?.emptyRowsSkipped ?? 0 }}</div></div>
+        <div class="stat"><div class="k">Errors</div><div class="v">0</div></div>
+      </div>
+      <p class="fine">Saved in CASE_TRANSFERT with SOURCE_FILE = {{ excel?.name }}.<span v-if="result.firstId"> IdRecord {{ result.firstId }}–{{ result.lastId }}.</span></p>
+    </section>
+
+    <section v-else-if="result" class="card" style="border-color:#f4b4ae" role="alert" aria-label="Result">
+      <div class="result-head">
+        <h2>Result</h2>
+        <span class="stopped">Stopped: {{ problemCount }} error{{ problemCount === 1 ? '' : 's' }}</span>
+      </div>
+      <div class="stats">
+        <div class="stat"><div class="k">Rows read</div><div class="v">{{ result.dataRows ?? '—' }}</div></div>
+        <div class="stat"><div class="k">Inserted</div><div class="v">{{ result.inserted ?? 0 }}</div></div>
+        <div class="stat"><div class="k">Empty rows skipped</div><div class="v">{{ selectedSheet?.emptyRowsSkipped ?? 0 }}</div></div>
+        <div class="stat bad"><div class="k">Errors</div><div class="v">{{ problemCount }}</div></div>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="errors">
+          <thead>
+            <tr><th>Excel row</th><th>Field</th><th>Problem</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="issue in result.definitionErrors || []" :key="issue">
+              <td>—</td><td>—</td><td>{{ issue }}</td>
+            </tr>
+            <tr v-for="(issue, index) in result.errors || []" :key="index">
+              <td><strong>{{ issue.row || '—' }}</strong></td>
+              <td>{{ issue.target || '—' }}</td>
+              <td>{{ issue.message }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="fine">Nothing was inserted. Correct the file or the mapping, then run the load again.</p>
+    </section>
+  </div>
 </template>
