@@ -513,7 +513,7 @@ function rowRange() {
                 </div>
                 <div class="stack">
                   <template v-if="assignments[field.column].mode === 'source'">
-                    <select v-model="assignments[field.column].sourceHeader" :aria-label="`Source column for ${field.title}`" @change="scheduleAssess">
+                    <select v-model="assignments[field.column].sourceHeader" class="control" :aria-label="`Source column for ${field.title}`" @change="scheduleAssess">
                       <option value="">Choose a column…</option>
                       <option v-for="column in columns" :key="column.key" :value="column.header">{{ column.header }}</option>
                     </select>
