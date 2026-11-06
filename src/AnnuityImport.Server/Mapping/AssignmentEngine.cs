@@ -387,8 +387,8 @@ public static class AssignmentEngine
         {
             return plan.Field.Kind switch
             {
-                TargetKind.Text when cell.Kind == ExcelValueKind.Text => Converted.Success(cell.Text),
-                TargetKind.Text when cell.Kind == ExcelValueKind.Number => Converted.Success(PlainNumber(cell.Number!.Value)),
+                TargetKind.Text when cell.Kind == ExcelValueKind.Text => TextValue(plan.Field, cell.Text ?? ""),
+                TargetKind.Text when cell.Kind == ExcelValueKind.Number => TextValue(plan.Field, PlainNumber(cell.Number!.Value)),
                 TargetKind.DateTime when cell.Kind == ExcelValueKind.DateTime => Converted.Success(cell.DateTime),
                 TargetKind.DateTime when cell.Kind == ExcelValueKind.Text => ParseDate(cell.Text ?? "", plan.DateFormat),
                 TargetKind.Integer when cell.Kind == ExcelValueKind.Number => ToInteger(cell.Number!.Value, cell.Display),
@@ -410,10 +410,38 @@ public static class AssignmentEngine
     private static string PlainNumber(decimal number) =>
         number.ToString("0.#############################", CultureInfo.InvariantCulture);
 
+    private static Converted TextValue(FieldDef field, string value)
+    {
+        var max = MaxCharacters(field.SqlType);
+        if (max is int limit && value.Length > limit)
+        {
+            var shown = value.Length <= 40 ? $"'{value}'" : $"'{value[..40]}…'";
+            return Converted.Fail($"{shown} is {value.Length} characters. {field.SqlType} allows {limit}.");
+        }
+
+        return Converted.Success(value);
+    }
+
+    private static int? MaxCharacters(string sqlType)
+    {
+        var open = sqlType.IndexOf('(');
+        var close = sqlType.IndexOf(')', open + 1);
+        if (open < 0 || close < 0)
+            return null;
+
+        var kind = sqlType[..open].Trim();
+        if (!kind.Equals("varchar", StringComparison.OrdinalIgnoreCase) &&
+            !kind.Equals("nvarchar", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var digits = sqlType[(open + 1)..close].Trim();
+        return int.TryParse(digits, NumberStyles.Integer, CultureInfo.InvariantCulture, out var limit) ? limit : null;
+    }
+
     private static Converted ConvertConstant(FieldDef field, string value)
     {
         if (field.Kind == TargetKind.Text)
-            return Converted.Success(value);
+            return TextValue(field, value);
 
         if (field.Kind == TargetKind.Boolean)
         {

@@ -394,7 +394,7 @@ select.control {
 
 .grid-head, .map-row {
   display: grid;
-  grid-template-columns: 196px 244px 212px minmax(140px, 1fr) 150px;
+  grid-template-columns: 196px max-content 212px minmax(140px, 1fr) 150px;
   gap: 14px;
   padding: 12px 16px;
   align-items: start;
