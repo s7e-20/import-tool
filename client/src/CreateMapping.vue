@@ -383,6 +383,7 @@ function onKeydown(event) {
 }
 
 async function showValues(column) {
+  if (valuesDialog.value?.header === column.header) return
   valuesDialog.value = { header: column.header, loading: true, error: '', distinct: 0, blankRows: 0, dataRows: 0, truncated: false, values: [] }
   try {
     const data = await api(`/api/uploads/${upload.value.uploadId}/values?header=${encodeURIComponent(column.header)}`)
@@ -612,19 +613,19 @@ function rowRange() {
       <aside class="source-pane" aria-label="Source columns">
         <div class="source-head">
           <h2>Source columns (Excel)</h2>
-          <p>Row 1 headers. One column can feed several fields. The line under a column is only its first value. Double-click the column, or choose Distinct values, to see every distinct value.</p>
+          <p>Tap a column to see every distinct value. The line under the name is only the first value.</p>
           <label for="srcsearch">Search</label>
           <input id="srcsearch" v-model="sourceQuery" type="search" placeholder="e.g. Date" />
         </div>
         <ul class="source-list">
-          <li v-for="column in visibleColumns" :key="column.key" tabindex="0" title="Double-click to see distinct values" @dblclick="showValues(column)" @keydown.enter.prevent="showValues(column)">
+          <li v-for="column in visibleColumns" :key="column.key" tabindex="0" title="Show distinct values" @click="showValues(column)" @keydown.enter.prevent="showValues(column)">
             <div class="top">
               <span class="col">{{ column.header }}</span>
               <span v-if="usedSources[column.header]" class="used">used {{ usedSources[column.header] }}×</span>
             </div>
             <div class="sub">
               <span class="kind">{{ typeLabel(column.kinds) }}</span>
-              <span class="mono">{{ columnSample(column) }}</span>
+              <span class="mono">First: {{ columnSample(column) }}</span>
             </div>
             <button type="button" class="values-link" @click.stop="showValues(column)" @dblclick.stop>
               {{ column.distinct }} distinct value{{ column.distinct === 1 ? '' : 's' }}
