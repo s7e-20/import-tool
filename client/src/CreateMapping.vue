@@ -612,7 +612,7 @@ function rowRange() {
       <aside class="source-pane" aria-label="Source columns">
         <div class="source-head">
           <h2>Source columns (Excel)</h2>
-          <p>Row 1 headers. One column can feed several fields. Double-click a column to see its distinct values.</p>
+          <p>Row 1 headers. One column can feed several fields. The line under a column is only its first value. Double-click the column, or choose Distinct values, to see every distinct value.</p>
           <label for="srcsearch">Search</label>
           <input id="srcsearch" v-model="sourceQuery" type="search" placeholder="e.g. Date" />
         </div>
@@ -626,6 +626,9 @@ function rowRange() {
               <span class="kind">{{ typeLabel(column.kinds) }}</span>
               <span class="mono">{{ columnSample(column) }}</span>
             </div>
+            <button type="button" class="values-link" @click.stop="showValues(column)" @dblclick.stop>
+              {{ column.distinct }} distinct value{{ column.distinct === 1 ? '' : 's' }}
+            </button>
           </li>
         </ul>
       </aside>

@@ -67,10 +67,24 @@ public sealed class ImportService
             header = column.Header,
             letter = column.Letter,
             kinds = column.Kinds,
+            distinct = DistinctCount(dataset, column),
             samples = column.Samples.Select(sample => new { row = sample.Row, display = sample.Display })
         }),
         suggestions = AssignmentEngine.Suggest(dataset)
     };
+
+    private static int DistinctCount(ExcelDataset dataset, SourceColumn column)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var row in dataset.Rows)
+        {
+            if (!row.Cells.TryGetValue(column.Key, out var cell) || cell.IsEmpty)
+                continue;
+            seen.Add(cell.Display);
+        }
+
+        return seen.Count;
+    }
 
     public static object? DistinctValues(ExcelDataset dataset, string header)
     {
