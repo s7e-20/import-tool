@@ -72,6 +72,45 @@ public sealed class ImportService
         suggestions = AssignmentEngine.Suggest(dataset)
     };
 
+    public static object? DistinctValues(ExcelDataset dataset, string header)
+    {
+        var column = dataset.Columns.FirstOrDefault(item =>
+            string.Equals(item.Header, header, StringComparison.Ordinal)
+            || string.Equals(item.Key, header.Trim(), StringComparison.OrdinalIgnoreCase));
+        if (column is null)
+            return null;
+
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+        var blanks = 0;
+        foreach (var row in dataset.Rows)
+        {
+            if (!row.Cells.TryGetValue(column.Key, out var cell) || cell.IsEmpty)
+            {
+                blanks++;
+                continue;
+            }
+
+            counts.TryGetValue(cell.Display, out var count);
+            counts[cell.Display] = count + 1;
+        }
+
+        const int limit = 200;
+        var ordered = counts
+            .OrderByDescending(pair => pair.Value)
+            .ThenBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return new
+        {
+            header = column.Header,
+            distinct = counts.Count,
+            blankRows = blanks,
+            dataRows = dataset.Rows.Count,
+            truncated = ordered.Count > limit,
+            values = ordered.Take(limit).Select(pair => new { value = pair.Key, count = pair.Value })
+        };
+    }
+
     public static object AssessmentPayload(AssessResult assessment) => new
     {
         definitionErrors = assessment.DefinitionErrors,

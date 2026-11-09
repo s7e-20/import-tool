@@ -99,6 +99,22 @@ public sealed class ImportController : ControllerBase
         return Ok(ImportService.DatasetPayload(session.SelectedDataset));
     }
 
+    [HttpGet("uploads/{id}/values")]
+    public IActionResult Values(string id, [FromQuery] string? header)
+    {
+        var dataset = Selected(id, out var error);
+        if (dataset is null)
+            return error!;
+        if (string.IsNullOrWhiteSpace(header))
+            return BadRequest(new { message = "Choose a source column." });
+
+        var values = ImportService.DistinctValues(dataset, header);
+        if (values is null)
+            return BadRequest(new { message = "That source column is not in this worksheet." });
+
+        return Ok(values);
+    }
+
     [HttpPost("uploads/{id}/assess")]
     public IActionResult Assess(string id, [FromBody] MappingDocument mapping)
     {

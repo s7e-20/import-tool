@@ -1,5 +1,5 @@
 <script setup>
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { api } from './api.js'
 
 const props = defineProps({
@@ -27,7 +27,15 @@ const dragOver = ref(false)
 const sourceQuery = ref('')
 const fieldFilter = ref('all')
 const assignments = reactive({})
+const mappingView = ref(false)
+const openPicker = ref('')
+const pickerQuery = ref('')
+const pickerIndex = ref(0)
+const pickerInput = ref(null)
+const pickerBox = ref({ top: 0, left: 0, width: 240, maxHeight: 240 })
+const valuesDialog = ref(null)
 let assessTimer = 0
+let pickerBlur = 0
 
 const datasetSheets = computed(() => (upload.value?.worksheets || []).filter(sheet => sheet.hasDataset))
 const selectedSheet = computed(() => (upload.value?.worksheets || []).find(sheet => sheet.name === chosenSheet.value) || null)
@@ -57,6 +65,13 @@ const usedSources = computed(() => {
 const visibleColumns = computed(() => {
   const query = sourceQuery.value.trim().toLowerCase()
   if (!query) return columns.value
+  return columns.value.filter(column => column.header.toLowerCase().includes(query))
+})
+
+const filteredPickerColumns = computed(() => {
+  const selected = openPicker.value ? assignments[openPicker.value]?.sourceHeader : ''
+  const query = pickerQuery.value.trim().toLowerCase()
+  if (!query || query === (selected || '').toLowerCase()) return columns.value
   return columns.value.filter(column => column.header.toLowerCase().includes(query))
 })
 
@@ -179,6 +194,8 @@ function removeFile() {
   worksheet.value = ''
   columns.value = []
   message.value = ''
+  valuesDialog.value = null
+  openPicker.value = ''
   resetAssignments()
   step.value = 'file'
 }
@@ -229,6 +246,135 @@ function useSuggestion(field) {
   assignments[field.column].sourceHeader = header
   scheduleAssess()
 }
+
+function positionPicker() {
+  const input = pickerInput.value
+  if (!input) return
+  const rect = input.getBoundingClientRect()
+  const width = Math.max(rect.width, 220)
+  const spaceBelow = window.innerHeight - rect.bottom - 12
+  const spaceAbove = rect.top - 12
+  const openUp = spaceBelow < 160 && spaceAbove > spaceBelow
+  const maxHeight = Math.max(120, Math.min(240, openUp ? spaceAbove : spaceBelow))
+  pickerBox.value = {
+    top: openUp ? rect.top - maxHeight - 4 : rect.bottom + 4,
+    left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)),
+    width,
+    maxHeight
+  }
+}
+
+function openPickerFor(field, input) {
+  openPicker.value = field.column
+  pickerQuery.value = assignments[field.column].sourceHeader || ''
+  pickerInput.value = input
+  const selected = columns.value.findIndex(column => column.header === assignments[field.column].sourceHeader)
+  pickerIndex.value = selected >= 0 ? selected : 0
+  nextTick(() => {
+    input?.select?.()
+    positionPicker()
+  })
+}
+
+function onPickerInput(field, event) {
+  pickerQuery.value = event.target.value
+  pickerIndex.value = 0
+  if (openPicker.value !== field.column) {
+    openPicker.value = field.column
+    pickerInput.value = event.target
+  }
+  nextTick(positionPicker)
+}
+
+function chooseColumn(field, header) {
+  clearTimeout(pickerBlur)
+  const changed = assignments[field.column].sourceHeader !== header
+  assignments[field.column].sourceHeader = header
+  pickerQuery.value = header
+  openPicker.value = ''
+  if (changed) scheduleAssess()
+}
+
+function finishPicker(field) {
+  if (openPicker.value !== field.column) return
+  const typed = pickerQuery.value.trim()
+  const exact = columns.value.find(column => column.header.toLowerCase() === typed.toLowerCase())
+  const previous = assignments[field.column].sourceHeader
+  const next = exact ? exact.header : typed ? previous : ''
+  openPicker.value = ''
+  if (next !== previous) {
+    assignments[field.column].sourceHeader = next
+    scheduleAssess()
+  }
+}
+
+function onPickerBlur(field) {
+  pickerBlur = setTimeout(() => finishPicker(field), 150)
+}
+
+function onPickerKey(event, field) {
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault()
+    const opening = openPicker.value !== field.column
+    if (opening) openPickerFor(field, event.target)
+    const count = filteredPickerColumns.value.length
+    if (!count || opening) {
+      nextTick(() => document.querySelector('.combo-list .active')?.scrollIntoView({ block: 'nearest' }))
+      return
+    }
+    pickerIndex.value = event.key === 'ArrowDown'
+      ? (pickerIndex.value + 1) % count
+      : (pickerIndex.value - 1 + count) % count
+    nextTick(() => document.querySelector('.combo-list .active')?.scrollIntoView({ block: 'nearest' }))
+    return
+  }
+  if (event.key === 'Enter') {
+    event.preventDefault()
+    if (openPicker.value !== field.column) {
+      openPickerFor(field, event.target)
+      return
+    }
+    const column = filteredPickerColumns.value[pickerIndex.value]
+    if (column) chooseColumn(field, column.header)
+    return
+  }
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    openPicker.value = ''
+    event.target.blur()
+  }
+}
+
+function onWindowChange() {
+  if (openPicker.value) positionPicker()
+}
+
+function onKeydown(event) {
+  if (event.key === 'Escape' && valuesDialog.value) valuesDialog.value = null
+}
+
+async function showValues(column) {
+  valuesDialog.value = { header: column.header, loading: true, error: '', distinct: 0, blankRows: 0, dataRows: 0, truncated: false, values: [] }
+  try {
+    const data = await api(`/api/uploads/${upload.value.uploadId}/values?header=${encodeURIComponent(column.header)}`)
+    valuesDialog.value = { ...data, loading: false, error: '' }
+  } catch (error) {
+    valuesDialog.value = { header: column.header, loading: false, error: error.message, distinct: 0, blankRows: 0, dataRows: 0, truncated: false, values: [] }
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('scroll', onWindowChange, true)
+  window.addEventListener('resize', onWindowChange)
+  window.addEventListener('keydown', onKeydown)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('scroll', onWindowChange, true)
+  window.removeEventListener('resize', onWindowChange)
+  window.removeEventListener('keydown', onKeydown)
+  clearTimeout(pickerBlur)
+})
 
 async function runTest() {
   busy.value = true
@@ -435,12 +581,12 @@ function rowRange() {
       <aside class="source-pane" aria-label="Source columns">
         <div class="source-head">
           <h2>Source columns (Excel)</h2>
-          <p>Row 1 headers. One column can feed several fields.</p>
+          <p>Row 1 headers. One column can feed several fields. Double-click a column to see its distinct values.</p>
           <label for="srcsearch">Search</label>
           <input id="srcsearch" v-model="sourceQuery" type="search" placeholder="e.g. Date" />
         </div>
         <ul class="source-list">
-          <li v-for="column in visibleColumns" :key="column.key">
+          <li v-for="column in visibleColumns" :key="column.key" tabindex="0" title="Double-click to see distinct values" @dblclick="showValues(column)" @keydown.enter.prevent="showValues(column)">
             <div class="top">
               <span class="col">{{ column.header }}</span>
               <span v-if="usedSources[column.header]" class="used">used {{ usedSources[column.header] }}×</span>
@@ -462,6 +608,7 @@ function rowRange() {
             <button type="button" class="tab" :class="{ on: fieldFilter === 'iss' }" @click="fieldFilter = 'iss'">Needs attention · {{ attentionCount }}</button>
           </div>
           <div class="buttons">
+            <button type="button" class="outline" :class="{ on: mappingView }" :aria-pressed="mappingView" :title="mappingView ? 'Show status and sample' : 'Hide status and sample while building the mapping'" @click="mappingView = !mappingView">Mapping view</button>
             <button type="button" class="outline" :disabled="busy" @click="runTest">Test mapping</button>
             <button type="button" class="export" :disabled="!canExport" @click="exportMapping">Export JSON</button>
           </div>
@@ -492,31 +639,48 @@ function rowRange() {
             <span>Fields not listed here ({{ hiddenCount }} system fields) are filled automatically and cannot be changed.</span>
           </div>
           <div style="overflow-x:auto">
-            <div style="min-width:960px">
+            <div class="mapping-table" :class="{ compact: mappingView }">
               <div class="grid-head">
-                <div>Target field (CASE_TRANSFERT)</div>
+                <div>Source</div>
                 <div>Assignment</div>
-                <div>Source column / constant</div>
-                <div>Sample: Excel → result</div>
-                <div>Status</div>
+                <div>Target field</div>
+                <div class="status-head">Status</div>
+                <div class="sample-head">Sample</div>
               </div>
               <p v-if="!visibleFields.length" class="empty-filter">No fields in this filter.</p>
               <div v-for="field in visibleFields" :key="field.column" class="map-row" :class="{ err: fieldStatus(field).level === 'err' }">
-                <div>
-                  <div class="field-name">{{ field.title }}<span v-if="field.mandatory" class="star"> *</span></div>
-                  <div class="field-type mono">{{ field.sqlType }} · {{ field.mandatory ? 'mandatory' : 'optional' }}</div>
-                </div>
-                <div class="modes" role="group" :aria-label="`Assignment for ${field.title}`">
-                  <button type="button" :class="{ on: assignments[field.column].mode === 'source' }" @click="setMode(field.column, 'source')">Source</button>
-                  <button type="button" :class="{ on: assignments[field.column].mode === 'constant' }" @click="setMode(field.column, 'constant')">Constant</button>
-                  <button type="button" :class="{ on: assignments[field.column].mode === 'unassigned' }" @click="setMode(field.column, 'unassigned')">Unassigned</button>
-                </div>
                 <div class="stack">
                   <template v-if="assignments[field.column].mode === 'source'">
-                    <select v-model="assignments[field.column].sourceHeader" class="control" :aria-label="`Source column for ${field.title}`" @change="scheduleAssess">
-                      <option value="">Choose a column…</option>
-                      <option v-for="column in columns" :key="column.key" :value="column.header">{{ column.header }}</option>
-                    </select>
+                    <div class="combo">
+                      <input
+                        class="control combo-input"
+                        :value="openPicker === field.column ? pickerQuery : assignments[field.column].sourceHeader"
+                        placeholder="Choose a column…"
+                        autocomplete="off"
+                        spellcheck="false"
+                        role="combobox"
+                        aria-autocomplete="list"
+                        :aria-expanded="openPicker === field.column"
+                        :aria-label="`Source column for ${field.title}`"
+                        @focus="openPickerFor(field, $event.target)"
+                        @input="onPickerInput(field, $event)"
+                        @keydown="onPickerKey($event, field)"
+                        @blur="onPickerBlur(field)"
+                      />
+                      <Teleport to="body">
+                        <ul v-if="openPicker === field.column" class="combo-list" role="listbox" :style="{ top: `${pickerBox.top}px`, left: `${pickerBox.left}px`, width: `${pickerBox.width}px`, maxHeight: `${pickerBox.maxHeight}px` }">
+                          <li v-if="!filteredPickerColumns.length" class="combo-empty">No matching column</li>
+                          <li
+                            v-for="(column, index) in filteredPickerColumns"
+                            :key="column.key"
+                            role="option"
+                            :class="{ active: index === pickerIndex }"
+                            :aria-selected="index === pickerIndex"
+                            @mousedown.prevent="chooseColumn(field, column.header)"
+                          >{{ column.header }}</li>
+                        </ul>
+                      </Teleport>
+                    </div>
                     <span v-if="assignments[field.column].sourceHeader" class="quiet">Excel type: {{ typeLabel(columns.find(column => column.header === assignments[field.column].sourceHeader)?.kinds) }}</span>
                     <button v-if="suggestions[field.column] && assignments[field.column].sourceHeader !== suggestions[field.column]" type="button" class="suggest" @click="useSuggestion(field)">Use suggested {{ suggestions[field.column] }}</button>
                     <label v-if="info(field.column).requiresDateFormat" class="format-box">
@@ -550,14 +714,23 @@ function rowRange() {
                   </template>
                   <span v-else class="quiet">Not imported</span>
                 </div>
+                <div class="modes" role="group" :aria-label="`Assignment for ${field.title}`">
+                  <button type="button" :class="{ on: assignments[field.column].mode === 'source' }" @click="setMode(field.column, 'source')">Source</button>
+                  <button type="button" :class="{ on: assignments[field.column].mode === 'constant' }" @click="setMode(field.column, 'constant')">Constant</button>
+                  <button type="button" :class="{ on: assignments[field.column].mode === 'unassigned' }" @click="setMode(field.column, 'unassigned')">Unassigned</button>
+                </div>
+                <div>
+                  <div class="field-name">{{ field.title }}<span v-if="field.mandatory" class="star"> *</span></div>
+                  <div class="field-type mono">{{ field.sqlType }} · {{ field.mandatory ? 'mandatory' : 'optional' }}</div>
+                </div>
+                <div class="stack status-cell">
+                  <span class="badge" :class="fieldStatus(field).level">{{ fieldStatus(field).label }}</span>
+                  <span class="quiet">{{ fieldStatus(field).note }}</span>
+                </div>
                 <div class="sample-cell mono">
                   <span class="dim">{{ samplePair(field).source }}</span>
                   <span class="arrow"> → </span>
                   <strong>{{ samplePair(field).result }}</strong>
-                </div>
-                <div class="stack">
-                  <span class="badge" :class="fieldStatus(field).level">{{ fieldStatus(field).label }}</span>
-                  <span class="quiet">{{ fieldStatus(field).note }}</span>
                 </div>
               </div>
             </div>
@@ -565,5 +738,27 @@ function rowRange() {
         </section>
       </div>
     </div>
+  </div>
+
+  <div v-if="valuesDialog" class="modal-back" @click.self="valuesDialog = null">
+    <section class="modal" role="dialog" aria-modal="true" :aria-label="`Distinct values for ${valuesDialog.header}`">
+      <div class="modal-head">
+        <div>
+          <h2>{{ valuesDialog.header }}</h2>
+          <p v-if="valuesDialog.loading">Reading distinct values…</p>
+          <p v-else-if="valuesDialog.error">{{ valuesDialog.error }}</p>
+          <p v-else>{{ valuesDialog.distinct }} distinct value{{ valuesDialog.distinct === 1 ? '' : 's' }} in {{ valuesDialog.dataRows }} data rows<span v-if="valuesDialog.blankRows"> · {{ valuesDialog.blankRows }} blank</span></p>
+        </div>
+        <button type="button" class="ghost" @click="valuesDialog = null">Close</button>
+      </div>
+      <ul v-if="!valuesDialog.loading && !valuesDialog.error" class="value-list">
+        <li v-if="!valuesDialog.values.length">This column has no values.</li>
+        <li v-for="(item, index) in valuesDialog.values" :key="index">
+          <span class="mono">{{ item.value }}</span>
+          <span class="count">{{ item.count }}</span>
+        </li>
+      </ul>
+      <p v-if="valuesDialog.truncated" class="fine">Showing the 200 most common values.</p>
+    </section>
   </div>
 </template>
