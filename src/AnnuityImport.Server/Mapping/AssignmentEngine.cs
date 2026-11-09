@@ -179,15 +179,307 @@ public static class AssignmentEngine
             }
         }
 
+        string? suggestedDate = null;
+        string? suggestedPattern = null;
+        string? suggestedDecimal = null;
+        string? suggestedThousands = null;
+        var suggestedThousandsNone = false;
+        if (plan.Source is not null && plan.Status is not "incompatible")
+        {
+            var texts = TextValues(dataset, plan.Source);
+            if (plan.RequiresDateFormat)
+                suggestedDate = SuggestDateFormat(texts);
+            if (plan.RequiresNumberFormat && SuggestNumberFormat(texts) is { } number)
+            {
+                suggestedPattern = number.Pattern;
+                suggestedDecimal = number.Decimal.ToString();
+                suggestedThousands = number.Thousands?.ToString();
+                suggestedThousandsNone = number.Thousands is null;
+            }
+        }
+
+        var message = plan.Message;
+        if (plan.Status == "needs-date-format" && suggestedDate is not null)
+            message = $"{message} Suggested: {suggestedDate}.";
+        if (plan.Status == "needs-number-format" && suggestedPattern is not null)
+            message = $"{message} Suggested: {suggestedPattern}.";
+
         return new TargetAssessment
         {
             Status = plan.Status,
             RequiresDateFormat = plan.RequiresDateFormat,
             RequiresNumberFormat = plan.RequiresNumberFormat,
-            Message = plan.Message,
+            Message = message,
+            SuggestedDateFormat = suggestedDate,
+            SuggestedNumberPattern = suggestedPattern,
+            SuggestedDecimalSeparator = suggestedDecimal,
+            SuggestedThousandsSeparator = suggestedThousands,
+            SuggestedThousandsNone = suggestedThousandsNone,
             ObservedKinds = plan.Source?.Kinds ?? [],
             Samples = samples
         };
+    }
+
+    private static List<string> TextValues(ExcelDataset dataset, SourceColumn column)
+    {
+        var values = new List<string>();
+        foreach (var row in dataset.Rows)
+        {
+            if (!row.Cells.TryGetValue(column.Key, out var cell) || cell.Kind != ExcelValueKind.Text || cell.IsEmpty)
+                continue;
+            values.Add(cell.Text ?? "");
+        }
+
+        return values;
+    }
+
+    private static readonly string[] DateFormatCandidates =
+    [
+        "dd.MM.yyyy",
+        "d.M.yyyy",
+        "dd/MM/yyyy",
+        "d/M/yyyy",
+        "dd-MM-yyyy",
+        "d-M-yyyy",
+        "yyyy-MM-dd",
+        "yyyy-M-d",
+        "yyyy.MM.dd",
+        "yyyy/MM/dd",
+        "dd.MM.yy",
+        "dd/MM/yy",
+        "dd.MM.yyyy HH:mm:ss",
+        "dd/MM/yyyy HH:mm:ss",
+        "yyyy-MM-dd HH:mm:ss",
+        "dd.MM.yyyy HH:mm",
+        "dd/MM/yyyy HH:mm",
+        "yyyy-MM-dd HH:mm",
+        "MM/dd/yyyy",
+        "M/d/yyyy",
+        "MM-dd-yyyy",
+        "MM.dd.yyyy"
+    ];
+
+    private static readonly (string DayFirst, string MonthFirst)[] AmbiguousDatePairs =
+    [
+        ("dd.MM.yyyy", "MM.dd.yyyy"),
+        ("d.M.yyyy", "M.d.yyyy"),
+        ("dd/MM/yyyy", "MM/dd/yyyy"),
+        ("d/M/yyyy", "M/d/yyyy"),
+        ("dd-MM-yyyy", "MM-dd-yyyy"),
+        ("dd/MM/yy", "MM/dd/yy")
+    ];
+
+    private static string? SuggestDateFormat(IReadOnlyList<string> values)
+    {
+        if (values.Count == 0)
+            return null;
+
+        var matches = DateFormatCandidates.Where(format => values.All(value => DateRoundTrips(value, format))).ToList();
+        foreach (var (dayFirst, monthFirst) in AmbiguousDatePairs)
+        {
+            if (matches.Contains(dayFirst) && matches.Contains(monthFirst))
+            {
+                matches.Remove(dayFirst);
+                matches.Remove(monthFirst);
+            }
+        }
+
+        return matches.FirstOrDefault();
+    }
+
+    private static bool DateRoundTrips(string text, string format)
+    {
+        if (!DateTime.TryParseExact(text, format, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
+            return false;
+        return parsed.ToString(format, CultureInfo.InvariantCulture) == text;
+    }
+
+    private readonly record struct NumberSuggestion(string Pattern, char Decimal, char? Thousands);
+
+    private static NumberSuggestion? SuggestNumberFormat(IReadOnlyList<string> values)
+    {
+        if (values.Count == 0)
+            return null;
+
+        char? decidedDecimal = null;
+        char? decidedThousands = null;
+        char? ambiguousMark = null;
+        var sawFraction = false;
+        foreach (var value in values)
+        {
+            if (!TryReadNumber(value, out var shape, out var decimalMark, out var thousandMark))
+                return null;
+
+            switch (shape)
+            {
+                case NumberShape.Integer:
+                    break;
+                case NumberShape.Ambiguous:
+                    if (ambiguousMark is char seen && seen != decimalMark)
+                        return null;
+                    ambiguousMark = decimalMark;
+                    break;
+                case NumberShape.Decimal:
+                    sawFraction = true;
+                    if (!Agree(ref decidedDecimal, decimalMark))
+                        return null;
+                    if (thousandMark is char thousand && !Agree(ref decidedThousands, thousand))
+                        return null;
+                    break;
+                case NumberShape.ThousandsOnly:
+                    if (thousandMark is not char group || !Agree(ref decidedThousands, group))
+                        return null;
+                    break;
+            }
+        }
+
+        if (ambiguousMark is char mark)
+        {
+            var resolved = decidedDecimal == mark || decidedThousands == mark;
+            if (!resolved)
+                return null;
+        }
+
+        if (decidedDecimal is null && decidedThousands is char grouped)
+        {
+            decidedDecimal = grouped switch
+            {
+                '.' => ',',
+                ',' => '.',
+                ' ' => ',',
+                '\'' => '.',
+                _ => null
+            };
+        }
+
+        if (decidedDecimal is null)
+            decidedDecimal = '.';
+        if (decidedDecimal == decidedThousands)
+            return null;
+
+        return new NumberSuggestion(
+            NumberPattern(decidedDecimal.Value, decidedThousands, sawFraction),
+            decidedDecimal.Value,
+            decidedThousands);
+    }
+
+    private static string NumberPattern(char decimalSeparator, char? thousands, bool hasFraction)
+    {
+        var fraction = hasFraction ? $"{decimalSeparator}##" : "";
+        if (thousands is not char group)
+            return "#" + fraction;
+
+        var grouped = group switch
+        {
+            ' ' => "# ###",
+            '\'' => "#'###",
+            _ => $"#{group}###"
+        };
+        return grouped + fraction;
+    }
+
+    private enum NumberShape
+    {
+        Integer,
+        Decimal,
+        ThousandsOnly,
+        Ambiguous
+    }
+
+    private static bool TryReadNumber(string text, out NumberShape shape, out char decimalMark, out char? thousandMark)
+    {
+        shape = NumberShape.Integer;
+        decimalMark = '.';
+        thousandMark = null;
+        if (text.Length == 0)
+            return false;
+
+        var body = text;
+        if (body[0] is '+' or '-')
+        {
+            if (body.Length == 1)
+                return false;
+            body = body[1..];
+        }
+
+        var marks = new List<char>();
+        foreach (var character in body)
+        {
+            if (char.IsDigit(character))
+                continue;
+            if (character is not ('.' or ',' or '\'' or ' '))
+                return false;
+            if (!marks.Contains(character))
+                marks.Add(character);
+        }
+
+        if (!body.Any(char.IsDigit))
+            return false;
+
+        if (marks.Count == 0)
+            return true;
+
+        if (marks.Count > 2)
+            return false;
+
+        if (marks.Count == 2)
+        {
+            var last = body.Last(character => !char.IsDigit(character));
+            if (last is not ('.' or ','))
+                return false;
+            var thousand = marks.First(character => character != last);
+            var split = body.LastIndexOf(last);
+            if (!IsDigits(body[(split + 1)..]) || !ValidGrouped(body[..split], thousand))
+                return false;
+            shape = NumberShape.Decimal;
+            decimalMark = last;
+            thousandMark = thousand;
+            return true;
+        }
+
+        var mark = marks[0];
+        var count = body.Count(character => character == mark);
+        if (mark is '\'' or ' ' || count > 1)
+        {
+            if (!ValidGrouped(body, mark))
+                return false;
+            shape = NumberShape.ThousandsOnly;
+            thousandMark = mark;
+            return true;
+        }
+
+        var index = body.IndexOf(mark);
+        var left = body[..index];
+        var right = body[(index + 1)..];
+        if (!IsDigits(left) || !IsDigits(right))
+            return false;
+        decimalMark = mark;
+        shape = right.Length == 3 ? NumberShape.Ambiguous : NumberShape.Decimal;
+        return true;
+    }
+
+    private static bool ValidGrouped(string integerPart, char thousands)
+    {
+        var groups = integerPart.Split(thousands);
+        if (groups.Length < 2 || groups[0].Length is < 1 or > 3 || !IsDigits(groups[0]))
+            return false;
+        for (var index = 1; index < groups.Length; index++)
+        {
+            if (groups[index].Length != 3 || !IsDigits(groups[index]))
+                return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsDigits(string text) => text.Length > 0 && text.All(char.IsDigit);
+
+    private static bool Agree(ref char? current, char next)
+    {
+        if (current is char existing && existing != next)
+            return false;
+        current = next;
+        return true;
     }
 
     private static PreparedMapping Prepare(ExcelDataset dataset, MappingDocument mapping)

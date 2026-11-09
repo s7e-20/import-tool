@@ -247,6 +247,35 @@ function useSuggestion(field) {
   scheduleAssess()
 }
 
+function useSuggestedDate(field) {
+  const format = info(field.column).suggestedDateFormat
+  if (!format) return
+  assignments[field.column].dateFormat = format
+  scheduleAssess()
+}
+
+function suggestedThousandsChoice(detail) {
+  if (detail.suggestedThousandsNone) return 'none'
+  if (detail.suggestedThousandsSeparator === ' ') return 'space'
+  return detail.suggestedThousandsSeparator || ''
+}
+
+function numberSuggestionApplied(field) {
+  const detail = info(field.column)
+  if (!detail.suggestedNumberPattern) return false
+  const entry = assignments[field.column]
+  return entry.decimalSeparator === detail.suggestedDecimalSeparator
+    && entry.thousandsChoice === suggestedThousandsChoice(detail)
+}
+
+function useSuggestedNumber(field) {
+  const detail = info(field.column)
+  if (!detail.suggestedNumberPattern) return
+  assignments[field.column].decimalSeparator = detail.suggestedDecimalSeparator || ''
+  assignments[field.column].thousandsChoice = suggestedThousandsChoice(detail)
+  scheduleAssess()
+}
+
 function positionPicker() {
   const input = pickerInput.value
   if (!input) return
@@ -436,10 +465,12 @@ function fieldStatus(field) {
     return { level: 'err', label: detail.requiresDateFormat ? 'Format needed' : 'Error', note: detail.message || 'This assignment needs a correction.' }
   }
   if (detail.status === 'needs-number-format' || (detail.requiresNumberFormat && !entry.decimalSeparator)) {
-    return { level: 'err', label: 'Separators needed', note: detail.message || 'Choose decimal and thousands separators.' }
+    const suggested = detail.suggestedNumberPattern ? ` Suggested: ${detail.suggestedNumberPattern}.` : ''
+    return { level: 'err', label: 'Separators needed', note: (detail.message || 'Choose decimal and thousands separators.') + (detail.message ? '' : suggested) }
   }
   if (detail.requiresDateFormat && !entry.dateFormat) {
-    return { level: 'err', label: 'Format needed', note: 'Text values: enter the source date format.' }
+    const suggested = detail.suggestedDateFormat ? ` Suggested: ${detail.suggestedDateFormat}.` : ''
+    return { level: 'err', label: 'Format needed', note: detail.message || `Text values: enter the source date format.${suggested}` }
   }
   const sampleError = (detail.samples || []).find(sample => sample.error)
   if (sampleError) return { level: 'err', label: 'Error', note: sampleError.error }
@@ -686,6 +717,7 @@ function rowRange() {
                     <label v-if="info(field.column).requiresDateFormat" class="format-box">
                       Source date format
                       <input v-model="assignments[field.column].dateFormat" class="mono" placeholder="dd.MM.yyyy" @input="scheduleAssess" />
+                      <button v-if="info(field.column).suggestedDateFormat && assignments[field.column].dateFormat !== info(field.column).suggestedDateFormat" type="button" class="suggest" @click="useSuggestedDate(field)">Use suggested {{ info(field.column).suggestedDateFormat }}</button>
                       <span class="quiet">e.g. dd.MM.yyyy · yyyy-MM-dd · dd/MM/yyyy</span>
                     </label>
                     <div v-if="info(field.column).requiresNumberFormat" class="format-box split">
@@ -706,6 +738,7 @@ function rowRange() {
                           <option value="space">space</option>
                         </select>
                       </label>
+                      <button v-if="info(field.column).suggestedNumberPattern && !numberSuggestionApplied(field)" type="button" class="suggest" @click="useSuggestedNumber(field)">Use suggested {{ info(field.column).suggestedNumberPattern }}</button>
                     </div>
                   </template>
                   <template v-else-if="assignments[field.column].mode === 'constant'">

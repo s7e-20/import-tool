@@ -122,6 +122,11 @@ public sealed class ImportService
                 requiresDateFormat = pair.Value.RequiresDateFormat,
                 requiresNumberFormat = pair.Value.RequiresNumberFormat,
                 message = pair.Value.Message,
+                suggestedDateFormat = pair.Value.SuggestedDateFormat,
+                suggestedNumberPattern = pair.Value.SuggestedNumberPattern,
+                suggestedDecimalSeparator = pair.Value.SuggestedDecimalSeparator,
+                suggestedThousandsSeparator = pair.Value.SuggestedThousandsSeparator,
+                suggestedThousandsNone = pair.Value.SuggestedThousandsNone,
                 observedKinds = pair.Value.ObservedKinds,
                 samples = pair.Value.Samples.Select(sample => new
                 {

@@ -42,6 +42,11 @@ public sealed class TargetAssessment
     public bool RequiresDateFormat { get; init; }
     public bool RequiresNumberFormat { get; init; }
     public string? Message { get; init; }
+    public string? SuggestedDateFormat { get; init; }
+    public string? SuggestedNumberPattern { get; init; }
+    public string? SuggestedDecimalSeparator { get; init; }
+    public string? SuggestedThousandsSeparator { get; init; }
+    public bool SuggestedThousandsNone { get; init; }
     public List<string> ObservedKinds { get; init; } = [];
     public List<SampleResult> Samples { get; init; } = [];
 }
