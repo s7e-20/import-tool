@@ -1,10 +1,10 @@
 using System.Text.Json;
-using AnnuityImport.Server.Data;
-using AnnuityImport.Server.Excel;
-using AnnuityImport.Server.Mapping;
+using NVGI.Projet.Importtool.Data;
+using NVGI.Projet.Importtool.Excel;
+using NVGI.Projet.Importtool.Mapping;
 using Microsoft.EntityFrameworkCore;
 
-namespace AnnuityImport.Server.Services;
+namespace NVGI.Projet.Importtool.Services;
 
 public sealed class ImportService
 {

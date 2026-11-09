@@ -1,8 +1,8 @@
 using System.Globalization;
-using AnnuityImport.Server.Data;
-using AnnuityImport.Server.Excel;
+using NVGI.Projet.Importtool.Data;
+using NVGI.Projet.Importtool.Excel;
 
-namespace AnnuityImport.Server.Mapping;
+namespace NVGI.Projet.Importtool.Mapping;
 
 public static class AssignmentEngine
 {

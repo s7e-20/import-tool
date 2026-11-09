@@ -1,6 +1,6 @@
-using AnnuityImport.Server.Excel;
+using NVGI.Projet.Importtool.Excel;
 
-namespace AnnuityImport.Server.Services;
+namespace NVGI.Projet.Importtool.Services;
 
 public sealed class UploadStore
 {

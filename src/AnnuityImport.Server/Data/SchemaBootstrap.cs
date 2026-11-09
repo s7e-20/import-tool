@@ -1,6 +1,6 @@
 using Microsoft.Data.SqlClient;
 
-namespace AnnuityImport.Server.Data;
+namespace NVGI.Projet.Importtool.Data;
 
 public static class SchemaBootstrap
 {

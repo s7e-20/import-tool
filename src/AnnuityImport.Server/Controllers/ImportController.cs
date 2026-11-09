@@ -1,10 +1,10 @@
 using System.Text;
-using AnnuityImport.Server.Data;
-using AnnuityImport.Server.Mapping;
-using AnnuityImport.Server.Services;
+using NVGI.Projet.Importtool.Data;
+using NVGI.Projet.Importtool.Mapping;
+using NVGI.Projet.Importtool.Services;
 using Microsoft.AspNetCore.Mvc;
 
-namespace AnnuityImport.Server.Controllers;
+namespace NVGI.Projet.Importtool.Controllers;
 
 [ApiController]
 [Route("api")]

@@ -1,4 +1,4 @@
-namespace AnnuityImport.Server.Data;
+namespace NVGI.Projet.Importtool.Data;
 
 public enum TargetKind
 {

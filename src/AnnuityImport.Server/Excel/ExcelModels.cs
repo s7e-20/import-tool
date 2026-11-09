@@ -1,4 +1,4 @@
-namespace AnnuityImport.Server.Excel;
+namespace NVGI.Projet.Importtool.Excel;
 
 public enum ExcelValueKind
 {

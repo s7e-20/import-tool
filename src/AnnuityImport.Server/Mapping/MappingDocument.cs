@@ -1,4 +1,4 @@
-namespace AnnuityImport.Server.Mapping;
+namespace NVGI.Projet.Importtool.Mapping;
 
 public sealed class MappingDocument
 {

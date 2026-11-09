@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
 
-namespace AnnuityImport.Server.Excel;
+namespace NVGI.Projet.Importtool.Excel;
 
 public sealed partial class ExcelDatasetReader
 {

@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 
-namespace AnnuityImport.Server.Data;
+namespace NVGI.Projet.Importtool.Data;
 
 public sealed class AppDbContext : DbContext
 {
