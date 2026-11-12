@@ -11,5 +11,6 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="..\..\sql\001-create-case-transfert.sql" Link="sql\001-create-case-transfert.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\sql\002-create-user.sql" Link="sql\002-create-user.sql" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

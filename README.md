@@ -2,6 +2,10 @@
 
 Web application that reads one worksheet from an `.xlsx` file and inserts the mapped values into the existing SQL Server table `dbo.CASE_TRANSFERT`.
 
+Sign in with a row from `dbo.[USER]` (`singleSignOnLogin` / `PASSUSER`). A successful login returns an API key that the browser keeps in `sessionStorage` for that window only. Closing the browser requires signing in again. The password is compared as stored; hashing is not applied yet.
+
+On a new local database the app creates `dbo.[USER]` and a plaintext user `admin` / `admin`. An existing `USER` table is left unchanged.
+
 The application has three screens:
 
 1. **Create new mapping** — upload Excel, assign source columns or constants, test the rows without saving, and export the mapping as JSON.
@@ -24,7 +28,7 @@ The default connection string in `src/AnnuityImport.Server/appsettings.json` is:
 Server=localhost;Database=AnnuityImport;Trusted_Connection=True;TrustServerCertificate=True
 ```
 
-On startup the app creates the `AnnuityImport` database and `dbo.CASE_TRANSFERT` when that table is missing. It does not alter or drop an existing table. The creation script is `sql/001-create-case-transfert.sql`.
+On startup the app creates the `AnnuityImport` database, `dbo.CASE_TRANSFERT`, and `dbo.[USER]` when those tables are missing. It does not alter or drop an existing table. The creation scripts are `sql/001-create-case-transfert.sql` and `sql/002-create-user.sql`.
 
 To use a database that already contains `dbo.CASE_TRANSFERT`, change the connection string and set `Database:EnsureSchema` to `false`.
 

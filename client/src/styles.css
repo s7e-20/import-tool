@@ -52,6 +52,62 @@ nav button.active {
   background: #2a3a5c;
 }
 
+.sign-out {
+  margin-left: auto;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid #3d527a;
+  border-radius: 8px;
+  background: transparent;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.session-check {
+  margin: 0;
+  padding: 24px;
+  color: #5b6474;
+}
+
+.login-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.login-card { width: min(420px, 100%); }
+
+.login-card .brand-mark {
+  font-weight: 700;
+  color: #13203a;
+}
+
+.login-card h1 { font-size: 24px; }
+
+.login-card label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #3d4656;
+}
+
+.login-card input {
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid #cbd1da;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 400;
+  background: #fff;
+}
+
+.login-card .primary { align-self: flex-start; }
+
 .db-alert {
   margin: 0;
   padding: 10px 24px;

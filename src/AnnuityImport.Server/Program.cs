@@ -13,6 +13,8 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("CaseTransfert")));
 builder.Services.AddSingleton<ExcelDatasetReader>();
 builder.Services.AddSingleton<UploadStore>();
+builder.Services.AddSingleton<ApiKeyStore>();
+builder.Services.AddSingleton<AuthService>();
 builder.Services.AddScoped<ImportService>();
 
 var app = builder.Build();
@@ -36,6 +38,7 @@ app.UseExceptionHandler(handler => handler.Run(async context =>
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
+app.UseMiddleware<ApiKeyMiddleware>();
 app.MapControllers();
 app.MapFallbackToFile("index.html");
 app.Run();
