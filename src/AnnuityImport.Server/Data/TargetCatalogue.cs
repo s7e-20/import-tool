@@ -116,7 +116,7 @@ public static class TargetCatalogue
         row.ExpectedDeadline = null;
         row.Communication = null;
         row.SalesForceReference = null;
-        row.Source = "Import tool";
+        row.Source = "ImportTool";
         row.TranslateOnly713 = null;
         row.TranslateEn713 = false;
         row.TranslateDe713 = false;

@@ -781,7 +781,7 @@ function rowRange() {
         </section>
         <section v-else-if="testResult?.ok" class="banner ok" role="status">
           <h3>Test passed: {{ testResult.readyRows }} rows<span v-if="firstRow && lastRow"> (Excel rows {{ firstRow }}–{{ lastRow }})</span> converted into CASE_TRANSFERT records</h3>
-          <p>Records were built in memory only. <strong>Nothing was saved to the database.</strong> The {{ hiddenCount }} system fields were filled automatically (Record Direction = I, Source = Import tool, SOURCE_FILE = {{ upload.fileName }}, DateRecord = import date).</p>
+          <p>Records were built in memory only. <strong>Nothing was saved to the database.</strong> The {{ hiddenCount }} system fields were filled automatically (Record Direction = I, Source = ImportTool, SOURCE_FILE = {{ upload.fileName }}, DateRecord = import date).</p>
         </section>
         <section v-if="exportedName" class="banner info" role="status">
           <strong>{{ exportedName }} downloaded.</strong>

@@ -12,7 +12,7 @@ The application has three screens:
 2. **Edit mapping** — upload the original Excel file and an existing mapping JSON, change the assignments, and export the updated JSON.
 3. **Execute a load** — upload Excel plus a saved mapping JSON and insert the rows.
 
-Running a load again inserts the rows again. There is no duplicate check.
+Running a load again inserts the rows again. There is no duplicate check. Inserted rows use `Source = ImportTool`.
 
 ## Requirements
 
