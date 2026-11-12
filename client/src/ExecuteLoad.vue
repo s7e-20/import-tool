@@ -113,7 +113,7 @@ async function execute() {
   <div class="flow">
     <div>
       <h1>Execute a load</h1>
-      <p class="lede">Choose the Excel file and a saved mapping (JSON). The mapping is read-only here. Every execution inserts the rows again.</p>
+      <p class="lede">Choose the Excel file and a saved mapping (JSON). The mapping is read-only here. To change it, use Edit mapping with the original Excel file. Every execution inserts the rows again.</p>
     </div>
 
     <section class="card" aria-label="Load settings">
@@ -158,7 +158,7 @@ async function execute() {
     <section v-if="inspect?.message" class="banner bad" role="alert">
       <h3>This Excel file does not match the mapping</h3>
       <p>{{ inspect.message }}</p>
-      <p>The mapping cannot be edited. Create a new mapping from this file.</p>
+      <p>Open Edit mapping with this Excel file and the JSON to change the assignments.</p>
     </section>
     <p v-if="message" class="banner bad">{{ message }}</p>
 

@@ -2,12 +2,13 @@
 
 Web application that reads one worksheet from an `.xlsx` file and inserts the mapped values into the existing SQL Server table `dbo.CASE_TRANSFERT`.
 
-The application has two screens:
+The application has three screens:
 
 1. **Create new mapping** — upload Excel, assign source columns or constants, test the rows without saving, and export the mapping as JSON.
-2. **Execute a load** — upload Excel plus a saved mapping JSON and insert the rows.
+2. **Edit mapping** — upload the original Excel file and an existing mapping JSON, change the assignments, and export the updated JSON.
+3. **Execute a load** — upload Excel plus a saved mapping JSON and insert the rows.
 
-A saved mapping cannot be edited. Change it by creating a new mapping from an Excel file. Running a load again inserts the rows again. There is no duplicate check.
+Running a load again inserts the rows again. There is no duplicate check.
 
 ## Requirements
 

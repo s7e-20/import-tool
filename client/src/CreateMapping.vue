@@ -4,7 +4,8 @@ import { api } from './api.js'
 
 const props = defineProps({
   fields: { type: Array, default: () => [] },
-  hiddenCount: { type: Number, default: 59 }
+  hiddenCount: { type: Number, default: 59 },
+  mode: { type: String, default: 'create' }
 })
 const emit = defineEmits(['done'])
 
@@ -24,6 +25,10 @@ const assess = ref({})
 const testResult = ref(null)
 const exportedName = ref('')
 const dragOver = ref(false)
+const mappingFileName = ref('')
+const mappingDoc = ref(null)
+const mappingToken = ref(0)
+const appliedKey = ref('')
 const sourceQuery = ref('')
 const fieldFilter = ref('all')
 const assignments = reactive({})
@@ -42,7 +47,13 @@ const selectedSheet = computed(() => (upload.value?.worksheets || []).find(sheet
 const assignedCount = computed(() =>
   props.fields.filter(field => assignments[field.column]?.mode && assignments[field.column].mode !== 'unassigned').length)
 const attentionCount = computed(() => props.fields.filter(field => fieldStatus(field).level === 'err').length)
-const canContinue = computed(() => !!selectedSheet.value?.hasDataset && !busy.value)
+const canContinue = computed(() =>
+  !!selectedSheet.value?.hasDataset && !busy.value && (props.mode !== 'edit' || !!mappingDoc.value))
+const mappingSheetMissing = computed(() => {
+  const wanted = mappingDoc.value?.worksheet
+  if (props.mode !== 'edit' || !wanted || !upload.value) return false
+  return !datasetSheets.value.some(sheet => sheet.name === wanted)
+})
 const canExport = computed(() => attentionCount.value === 0 && !busy.value)
 
 const visibleFields = computed(() => props.fields.filter(field => {
@@ -75,7 +86,15 @@ const filteredPickerColumns = computed(() => {
   return columns.value.filter(column => column.header.toLowerCase().includes(query))
 })
 
-watch(() => props.fields, ensureAssignments, { immediate: true })
+watch(() => props.fields, () => {
+  ensureAssignments()
+  if (props.mode !== 'edit' || !mappingDoc.value || step.value !== 'configure' || !props.fields.length || !upload.value) return
+  const key = `${upload.value.uploadId}|${mappingToken.value}|${worksheet.value}`
+  if (appliedKey.value === key) return
+  applyLoadedMapping(mappingDoc.value)
+  appliedKey.value = key
+  runAssess()
+}, { immediate: true })
 
 function ensureAssignments() {
   for (const field of props.fields) {
@@ -177,14 +196,85 @@ async function receiveFile(file) {
   try {
     const data = await api('/api/uploads', { method: 'POST', body })
     upload.value = data
-    const usable = (data.worksheets || []).filter(sheet => sheet.hasDataset)
-    chosenSheet.value = usable.length === 1 ? usable[0].name : ''
+    chosenSheet.value = props.mode === 'edit'
+      ? preferMappedSheet(data.worksheets || [])
+      : ((data.worksheets || []).filter(sheet => sheet.hasDataset).length === 1
+        ? (data.worksheets || []).find(sheet => sheet.hasDataset).name
+        : '')
+    appliedKey.value = ''
     step.value = 'file'
   } catch (error) {
     message.value = error.message
     upload.value = null
   } finally {
     busy.value = false
+  }
+}
+
+function preferMappedSheet(worksheets) {
+  const wanted = mappingDoc.value?.worksheet
+  const match = wanted && worksheets.find(sheet => sheet.name === wanted && sheet.hasDataset)
+  if (match) return match.name
+  const usable = worksheets.filter(sheet => sheet.hasDataset)
+  if (usable.length === 1) return usable[0].name
+  return ''
+}
+
+async function receiveMapping(file) {
+  if (!file.name.toLowerCase().endsWith('.json')) {
+    message.value = 'Choose a mapping .json file.'
+    return
+  }
+
+  try {
+    const doc = JSON.parse(await file.text())
+    if (doc?.format !== 'annuity-import-mapping' || doc?.version !== 1 || !Array.isArray(doc.assignments)) {
+      message.value = 'This file is not an annuity import mapping.'
+      return
+    }
+    mappingDoc.value = doc
+    mappingFileName.value = file.name
+    mappingToken.value += 1
+    appliedKey.value = ''
+    message.value = ''
+    if (upload.value) chosenSheet.value = preferMappedSheet(upload.value.worksheets || [])
+  } catch {
+    message.value = 'The mapping file is not valid JSON.'
+  }
+}
+
+function onMappingDrop(event) {
+  const file = event.dataTransfer?.files?.[0]
+  if (file) receiveMapping(file)
+}
+
+function onMapping(event) {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  if (file) receiveMapping(file)
+}
+
+function removeMapping() {
+  mappingDoc.value = null
+  mappingFileName.value = ''
+  mappingToken.value += 1
+  appliedKey.value = ''
+}
+
+function applyLoadedMapping(doc) {
+  ensureAssignments()
+  for (const spec of doc.assignments || []) {
+    const entry = assignments[spec.target]
+    if (!entry) continue
+    const mode = spec.mode === 'source' || spec.mode === 'constant' ? spec.mode : 'unassigned'
+    entry.mode = mode
+    entry.sourceHeader = spec.sourceHeader || ''
+    entry.constant = spec.constant ?? ''
+    entry.dateFormat = spec.dateFormat || ''
+    entry.decimalSeparator = spec.decimalSeparator || ''
+    if (spec.thousandsSeparatorNone) entry.thousandsChoice = 'none'
+    else if (spec.thousandsSeparator === ' ') entry.thousandsChoice = 'space'
+    else entry.thousandsChoice = spec.thousandsSeparator || ''
   }
 }
 
@@ -196,6 +286,7 @@ function removeFile() {
   message.value = ''
   valuesDialog.value = null
   openPicker.value = ''
+  appliedKey.value = ''
   resetAssignments()
   step.value = 'file'
 }
@@ -211,7 +302,7 @@ async function continueToMapping() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ worksheet: chosenSheet.value })
     })
-    if (changingSheet) resetAssignments()
+    if (changingSheet && props.mode !== 'edit') resetAssignments()
     await loadDataset()
   } catch (error) {
     message.value = error.message
@@ -229,7 +320,14 @@ async function loadDataset() {
   emptyRowsSkipped.value = data.emptyRowsSkipped
   suggestions.value = data.suggestions || {}
   worksheet.value = data.worksheet
-  ensureAssignments()
+  const key = `${upload.value.uploadId}|${mappingToken.value}|${data.worksheet}`
+  if (props.mode === 'edit' && mappingDoc.value && appliedKey.value !== key) {
+    resetAssignments()
+    applyLoadedMapping(mappingDoc.value)
+    if (props.fields.length) appliedKey.value = key
+  } else {
+    ensureAssignments()
+  }
   step.value = 'configure'
   await runAssess()
 }
@@ -431,7 +529,9 @@ async function exportMapping() {
   }
 
   const fileStem = (upload.value.fileName || 'mapping').replace(/\.xlsx$/i, '')
-  const name = `mapping_${fileStem}_${worksheet.value}.json`
+  const name = props.mode === 'edit' && mappingFileName.value
+    ? mappingFileName.value
+    : `mapping_${fileStem}_${worksheet.value}.json`
   const blob = new Blob([JSON.stringify(mappingBody(), null, 2)], { type: 'application/json' })
   const link = document.createElement('a')
   link.href = URL.createObjectURL(blob)
@@ -538,8 +638,9 @@ function rowRange() {
     </ol>
 
     <div>
-      <h1>Create new mapping</h1>
-      <p class="lede">Upload an Excel file (.xlsx). Row 1 must contain the column headers; data starts on row 2.</p>
+      <h1>{{ mode === 'edit' ? 'Edit mapping' : 'Create new mapping' }}</h1>
+      <p v-if="mode === 'edit'" class="lede">Upload the original Excel file and the mapping JSON. Adjust the assignments, test them, then export the updated JSON.</p>
+      <p v-else class="lede">Upload an Excel file (.xlsx). Row 1 must contain the column headers; data starts on row 2.</p>
     </div>
 
     <section class="card" aria-label="Excel file">
@@ -558,11 +659,28 @@ function rowRange() {
         </div>
         <button type="button" class="ghost" @click="removeFile">Remove</button>
       </div>
+      <p v-if="message && mode !== 'edit'" class="banner bad">{{ message }}</p>
+    </section>
+
+    <section v-if="mode === 'edit'" class="card" aria-label="Mapping file">
+      <h2>2. Mapping JSON</h2>
+      <label class="drop" @dragover.prevent @drop.prevent="onMappingDrop">
+        <strong>Drop a mapping .json file here or <span class="browse">browse</span></strong>
+        <span>The file exported from Create new mapping or from a previous edit</span>
+        <input type="file" accept=".json,application/json" :disabled="busy" @change="onMapping" />
+      </label>
+      <div v-if="mappingDoc" class="file-row">
+        <div class="grow">
+          <div class="name">{{ mappingFileName }}</div>
+          <div class="meta">{{ mappingDoc.worksheet ? `Saved worksheet: ${mappingDoc.worksheet}` : 'No worksheet saved in this mapping' }}</div>
+        </div>
+        <button type="button" class="ghost" @click="removeMapping">Remove</button>
+      </div>
       <p v-if="message" class="banner bad">{{ message }}</p>
     </section>
 
     <section v-if="upload" class="card" aria-label="Worksheet">
-      <h2>2. Worksheet</h2>
+      <h2>{{ mode === 'edit' ? '3' : '2' }}. Worksheet</h2>
       <p v-if="datasetSheets.length === 1" class="note">Only one worksheet contains data, so it was selected automatically. With several sheets, choose exactly one here.</p>
       <p v-else-if="datasetSheets.length > 1" class="note">Several worksheets contain data. Choose exactly one.</p>
       <p v-else class="banner bad">None of the worksheets contain a dataset. {{ upload.worksheets.map(sheet => `${sheet.name}: ${sheet.error}`).join(' ') }}</p>
@@ -576,7 +694,7 @@ function rowRange() {
     </section>
 
     <section v-if="selectedSheet?.hasDataset" class="card" aria-label="File check">
-      <h2>3. File check</h2>
+      <h2>{{ mode === 'edit' ? '4' : '3' }}. File check</h2>
       <ul class="checks">
         <li><span class="tick" aria-hidden="true">✓</span>Header row found on row 1 ({{ selectedSheet.columnCount }} headers)</li>
         <li><span class="tick" aria-hidden="true">✓</span>All headers filled in and unique (case-insensitive)</li>
@@ -585,6 +703,7 @@ function rowRange() {
         <li><span class="tick" aria-hidden="true">✓</span>{{ selectedSheet.rowCount }} data rows · {{ selectedSheet.emptyRowsSkipped }} empty rows skipped</li>
       </ul>
       <p class="fine">If a check fails, the message names the Excel row or column and that worksheet cannot be selected.</p>
+      <p v-if="mappingSheetMissing" class="banner bad">This mapping was saved for worksheet “{{ mappingDoc.worksheet }}”, which is not in this file. Choose another worksheet to continue.</p>
     </section>
 
     <div v-if="upload" class="actions">
@@ -603,6 +722,7 @@ function rowRange() {
 
     <section class="summary" aria-label="Selected file">
       <div><span class="label">File</span> <strong>{{ upload.fileName }}</strong></div>
+      <div v-if="mode === 'edit'"><span class="label">Mapping</span> <strong>{{ mappingFileName }}</strong></div>
       <div><span class="label">Worksheet</span> <strong>{{ worksheet }}</strong></div>
       <div><span class="label">Source columns</span> <strong>{{ columns.length }}</strong></div>
       <div><span class="label">Data rows</span> <strong>{{ rowCount }}</strong> <span class="label">{{ rowRange() }}</span></div>
@@ -665,7 +785,8 @@ function rowRange() {
         </section>
         <section v-if="exportedName" class="banner info" role="status">
           <strong>{{ exportedName }} downloaded.</strong>
-          This mapping is now final. Use it in <a href="#" @click.prevent="emit('done')">Execute a load</a>. To change it later, start again with an Excel file.
+          <template v-if="mode === 'edit'">This replaces the mapping you opened. Use it in <a href="#" @click.prevent="emit('done')">Execute a load</a>.</template>
+          <template v-else>Use it in <a href="#" @click.prevent="emit('done')">Execute a load</a>. To change it later, open Edit mapping with this JSON and the original Excel file.</template>
         </section>
 
         <section class="card" style="padding:0;gap:0" aria-label="Target fields">

@@ -115,7 +115,7 @@ public static class AssignmentEngine
 
         return "Source fields have changed. Missing: "
             + string.Join(", ", missing)
-            + ". Create a new mapping from the Excel file. This load does not change the saved mapping.";
+            + ". Edit the mapping with this Excel file, or create a new one. This load does not change the saved mapping.";
     }
 
     public static Dictionary<string, string> Suggest(ExcelDataset dataset)

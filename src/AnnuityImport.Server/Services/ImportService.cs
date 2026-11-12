@@ -177,7 +177,7 @@ public sealed class ImportService
                     needsWorksheet = false,
                     worksheet = mapping.Worksheet,
                     worksheets = sheets,
-                    message = $"The saved worksheet '{mapping.Worksheet}' is not available in this workbook. Create a new mapping."
+                    message = $"The saved worksheet '{mapping.Worksheet}' is not available in this workbook. Edit the mapping or create a new one."
                 };
             }
 
@@ -223,7 +223,7 @@ public sealed class ImportService
         {
             sheet = FindSheet(workbook, mapping.Worksheet);
             if (sheet?.Dataset is null)
-                return (null, $"The saved worksheet '{mapping.Worksheet}' is not available in this workbook. Create a new mapping.");
+                return (null, $"The saved worksheet '{mapping.Worksheet}' is not available in this workbook. Edit the mapping or create a new one.");
         }
         else if (!string.IsNullOrWhiteSpace(requestedWorksheet))
         {

@@ -32,12 +32,14 @@ onMounted(async () => {
       <div class="brand">Annuity Import Tool</div>
       <nav aria-label="Main menu">
         <button :class="{ active: page === 'create' }" @click="page = 'create'">Create new mapping</button>
+        <button :class="{ active: page === 'edit' }" @click="page = 'edit'">Edit mapping</button>
         <button :class="{ active: page === 'execute' }" @click="page = 'execute'">Execute a load</button>
       </nav>
     </header>
     <p v-if="health && health.database !== 'ok'" class="db-alert">SQL Server is not ready. You can still create and test a mapping. {{ health.message }}</p>
     <main>
       <CreateMapping v-if="page === 'create'" :fields="fields" :hidden-count="hiddenCount" @done="page = 'execute'" />
+      <CreateMapping v-else-if="page === 'edit'" mode="edit" :fields="fields" :hidden-count="hiddenCount" @done="page = 'execute'" />
       <ExecuteLoad v-else :hidden-count="hiddenCount" />
     </main>
   </div>
